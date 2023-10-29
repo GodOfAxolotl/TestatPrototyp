@@ -1,219 +1,127 @@
-/** //<>// //<>//
+/** //<>//
  *
  *TODO:
  *Refacture
  *Improve behavior so speeder doesnt leave map on y scale
  */
 
+/**
+ * CONFIG
+ */
+boolean controlled = true;
+boolean debug = false;
+boolean collision = true;
+float coldStackTime = 1.7;
+boolean boostMode = false;
+boolean rails = true;
+float baseAcc = 5.0;
+int trailLength = 1000;
+int trailIndex = 0;
+int bulletSpeed = 400;
+int winCondition = 25;
+int fr = 60;
+int w = 1200;
+int h = 900;
 
-boolean controlled = false;
-
-int move = 0;
-int turn = 0;
-
-PVector pos;
-PVector vel;
-float maxVel = 7;
-float baseMaxVel = 7;
-float boostFactor = 1.3;
-float turnVel = 0;
-float turnAcc = 0.2;
-float turnspeed = 100;
-float acc = 5.0;
-float friction = 0.001;
-float angle = 0;
-float rotationFactor = 0.63;
+Menu menu;
+Guardian guardian;
+Guardian speeder;
 
 Obstacle obs1;
 Obstacle obs2;
 
 Heatfield heatfield;
 
-float boostCharge = 0;
-boolean boosting = false;
-
-boolean boostMode = false;
-
-float coldStack = 0;
-float coldStackTime = 3;
-
-float bulletCooldown = 0;
-
+Behavior behavior;
+Behavior speederBehavior;
 boolean wPressed, sPressed, aPressed, dPressed, spacePressed;
-boolean rails = false;
 
 ArrayList<Projectile> projectiles = new ArrayList<Projectile>();
-
-int trailLength = 10000;
-int trailIndex = 0;
 PVector[] trail = new PVector[trailLength];
 
-Behavior behavior;
 
 void setup() {
   frameRate(60);
   size(1200, 900, P2D);
-  background(255);
-  smooth(16);
-  pos = new PVector(width/8, height/2);
-  for (int i = 0; i < trailLength; i++) {
-    trail[i] = pos.copy();
-  }
-  vel = new PVector(0, 0);
+  smooth(16 );
+  setter();
+}
 
+void setter() {
+  background(255);
+  menu = new Menu(MenuState.MAIN);
+  guardian = new Guardian(new PVector(width/8, height/2));
+  speeder = new Guardian(new PVector(width/8, height/2 + 30), false);
+  for (int i = 0; i < trailLength; i++) {
+    trail[i] = guardian.pos.copy();
+  }
   heatfield = new Heatfield();
   randomizeObstacles();
   behavior = new Behavior(heatfield.pos, BehaviorState.SEARCHING);
+  speederBehavior = new Behavior(new PVector(width/2 +30, height/2), BehaviorState.SEARCHING);
 }
 
 void draw() {
+  background(240);
+  switch(menu.state) {
+  case INGAME:
+    ingameUpdate();
+    break;
+  default:
+    menu.render();
+    menu.update();
+    break;
+  }
+}
+
+
+void ingameUpdate() {
   float dt = 1.0 / frameRate;
-  println("DT: " + dt);
-  println(frameRate);
-  bulletCooldown += dt;
-  coldStack += dt;
-  if (bulletCooldown >= 2) bulletCooldown = 2;
-  if (coldStack >= coldStackTime * 10) {
-    coldStack = coldStackTime * 10;
+  guardian.tickBulletCooldown(dt);
+  speeder.tickBulletCooldown(dt);
+  guardian.tickColdStack(dt);
+
+  if (guardian.coldStack >= coldStackTime * 10) {
+    menu.state = MenuState.LOST;
   }
 
-  if (spacePressed && boostCharge >= 2 && !boostMode) {
-    boosting = true;
-  } else if (spacePressed && boostCharge >= 5 && boostMode) {
-    boosting = true;
-  }
-  if (boosting) {
-    maxVel = baseMaxVel * boostFactor;
-    acc = 8.0;
-    boostCharge -= dt;
-    if (boostCharge <= 0) {
-      boostCharge = 0;
-      boosting = false;
-      acc = 4.0;
-    }
-  } else {
-    if (maxVel > baseMaxVel) maxVel -= dt;
-    if (maxVel < baseMaxVel) maxVel = baseMaxVel;
-    boostCharge += dt;
-    if (boostCharge >= 5) boostCharge = 5;
+  if (spacePressed && !guardian.isBoosting()) {
+    guardian.boosting();
   }
 
-  if (dist(pos.x, pos.y, heatfield.pos.x, heatfield.pos.y) < 75 ) coldStack = 0;
+  if (dist(guardian.pos.x, guardian.pos.y, heatfield.pos.x, heatfield.pos.y) < 75 ) guardian.coldStack = 0;
 
   background(240);
 
-  if (coldStack >= coldStackTime * 10) {
-    textSize(24);
-    fill(255, 0, 0);
-    text("You're cold mate", width / 2, height / 2);
-  }
-
-
-  obs1.render();
-  obs2.render();
-
   fill(0);
   textSize(18);
-  text("Press M to toggle rail mode. Currently on rail: " + rails, 10, 20);
-  text("Press B to toggle rail boost. Currently fix boost: " + boostMode, 10, 40);
-  text("Press C to clear trail, Press Q to control yourself.", 10, 60);
-  text(behavior.state.toString(), 10, 100);
-  text(vel.toString(), 10, 80);
+  text("FPS: " + 60, 10, 30);
 
-  if (mousePressed && bulletCooldown >= 2) {
-    float velx = cos(angle) * 500 * dt;
-    float vely = sin(angle) * 500 * dt;
-    Projectile p = new Projectile(pos.x, pos.y, vel.x, vel.y, velx, vely);
-    projectiles.add(p);
-    bulletCooldown = 0;
+  if (mousePressed && guardian.canShoot() && guardian.enabled) {
+    float velx = cos(guardian.angle) * bulletSpeed * dt;
+    float vely = sin(guardian.angle) * bulletSpeed * dt;
+    projectiles.add(new Projectile(guardian.pos.x, guardian.pos.y, guardian.vel.x, guardian.vel.y, velx, vely, 0));
+    guardian.bulletCooldown = 0;
   }
+
+  if (speeder.canShoot() && speeder.pos.x + 5 < guardian.pos.x && speeder.score <= guardian.score && speeder.enabled) {
+    PVector bVel = guardian.pos.copy().sub(speeder.pos).normalize().mult(dt).mult(bulletSpeed);
+    projectiles.add(new Projectile(speeder.pos.x, speeder.pos.y, speeder.vel.x, speeder.vel.y, bVel.x, bVel.y, 1));
+    speeder.bulletCooldown = 0;
+  }
+
   if (controlled) {
-    if (aPressed) {
-      if (rails) {
-        angle -= radians(2) * turnspeed * dt;
-        vel.rotate(-radians(2) * turnspeed * rotationFactor * dt);
-      } else {
-        turnVel -= turnAcc * dt;
-      }
-    }
-    if (dPressed) {
-      if (rails) {
-        angle += radians(2) * turnspeed * dt;
-        vel.rotate(radians(2) * turnspeed * rotationFactor * dt);
-      } else {
-        turnVel += turnAcc * dt;
-      }
-    }
-    if (wPressed) {
-      vel.x += cos(angle) * acc * dt;
-      vel.y += sin(angle) * acc * dt;
-    }
-    if (sPressed) {
-      vel.x -= cos(angle) * acc * dt;
-      vel.y -= sin(angle) * acc * dt;
-    }
-    if (!rails) {
-      angle += turnVel *dt;
-    }
+    boolean[] c = {wPressed, sPressed, aPressed, dPressed};
+    guardian.gameInput(c, dt);
   } else {
-    boolean[] controller = behavior.behavior(pos, vel, rails, angle);
-    if (controller[2]) {
-      if (rails) {
-        angle -= radians(2) * turnspeed * dt;
-        vel.rotate(-radians(2) * turnspeed * rotationFactor * dt);
-      } else {
-        turnVel -= turnAcc * dt;
-      }
-    }
-    if (controller[3]) {
-      if (rails) {
-        angle += radians(2) * turnspeed * dt;
-        vel.rotate(radians(2) * turnspeed * rotationFactor * dt);
-      } else {
-        turnVel += turnAcc * dt;
-      }
-    }
-    if (controller[0]) {
-      vel.x += cos(angle) * acc * dt;
-      vel.y += sin(angle) * acc * dt;
-    }
-    if (controller[1]) {
-      vel.x -= cos(angle) * acc * dt;
-      vel.y -= sin(angle) * acc * dt;
-    }
-    if (!rails) {
-      angle += turnVel *dt;
-    }
+    boolean[] c = behavior.behavior(guardian.pos, guardian.vel, rails, guardian.angle);
+    guardian.comController(c, dt);
   }
 
-  vel.mult(1-friction);
-  vel.x = constrain(vel.x, -maxVel, maxVel);
-  vel.y = constrain(vel.y, -maxVel, maxVel);
+  boolean[] c = speederBehavior.behavior(speeder.pos, speeder.vel, true, speeder.angle);
+  speeder.comController(c, dt);
 
-  pos.add(vel);
-
-  if (pos.x > width ||!controlled && pos.x > width -10) {
-    pos.x = 0;
-    heatfield = new Heatfield();
-    randomizeObstacles();
-    //behavior = new Behavior(heatfield.pos, BehaviorState.HALTING);
-  } else if (pos.x < 0 && controlled) {
-    pos.x = width;
-  } else if (pos.y > height) {
-    //vel.y = vel.y * -1;
-    pos.y = 0;
-  } else if ( pos.y < 0) {
-    //vel.y = vel.y * -1;
-    pos.y = height;
-  }
-
-  loadPixels();
-  if (get(Math.round(pos.x), Math.round(pos.y)) == color(1)) {
-    //vel.mult(-1);
-    //pos.add(vel);
-  }
-
-  trail[trailLength - 1] = pos.copy();
+  trail[trailLength - 1] = guardian.pos.copy();
   for (int i = 0; i < trailLength - 1; i++) {
     trail[i] = trail[i + 1];
   }
@@ -223,50 +131,53 @@ void draw() {
   for (int i = 0; i < trailLength; i++) {
     point(trail[i].x, trail[i].y);
   }
-  strokeWeight(1);
 
-  pushMatrix();
-  translate(pos.x, pos.y);
-  rotate(angle);
-  fill(51, 109, 167);
-  noStroke();
-  if (boosting) fill(235, 190, 23);
-  ellipse(0, 0, 60, 20);
-  triangle(0, 18, 40, 0, 0, -18);
-  popMatrix();
-  
+  obs1.render();
+  obs2.render();
+  guardian.colideWithObstacles(1);
+  speeder.colideWithObstacles(2);
+  guardian.update(dt);
+  guardian.render();
+  speeder.update(dt);
+  speeder.render();
+  heatfield.render();
 
-  for (Projectile p : projectiles) {
+  for (Projectile p : new ArrayList<Projectile>(projectiles)) {
     p.update();
-    p.anzeigen();
-  }
-
-  for (int i = projectiles.size() - 1; i >= 0; i--) {
-    Projectile p = projectiles.get(i);
+    p.render();
+    if (dist(p.pos.x, p.pos.y, guardian.pos.x, guardian.pos.y) <= 20 && p.sender == 1) {
+      guardian.HP--;
+      if (guardian.HP <= 0) {
+        menu.state = MenuState.LOST;
+      }
+      projectiles.remove(p);
+    } else if (dist(p.pos.x, p.pos.y, speeder.pos.x, speeder.pos.y) <= 20 && p.sender == 0) {
+      speeder.HP--;
+      if (speeder.HP <= 0) {
+        speeder = new Guardian(new PVector(width/8, height/2 + 30), false);
+        speeder.enabled = false;
+      }
+      projectiles.remove(p);
+    }
     if (p.pos.x < 0 || p.pos.x > width || p.pos.y < 0 || p.pos.y > height) {
-      projectiles.remove(i);
+      projectiles.remove(p);
     }
   }
 
-  PVector richtung = new PVector(mouseX - pos.x, mouseY - pos.y);
-  float winkel = atan2(richtung.y, richtung.x);
-
-  pushMatrix();
-  noFill();
-  stroke(0);
-  strokeWeight(2);
-  //rotate(HALF_PI);
-  arc(pos.x, pos.y, 100, 100, winkel - HALF_PI / 2, winkel + HALF_PI);
-  popMatrix();
+  if (speeder.score >= winCondition) {
+    menu.state = MenuState.LOST;
+  } else if (guardian.score >= winCondition) {
+    menu.state = MenuState.WON;
+  }
 
   fill(255, 125, 0);
-  drawBar(boostCharge, 20, 5);
-  fill(125, 125, 255);
-  drawBar((float)int(coldStack / coldStackTime), 50, 10);
+  drawBar(guardian.boostCharge, 20, 5);
   fill(255, 65, 35);
-  drawBar(bulletCooldown, 80, 2);
-
-  heatfield.render();
+  drawBar(guardian.HP, 50, 10);
+  fill(125, 125, 255);
+  drawBar((float)int(guardian.coldStack / coldStackTime), 80, 10);
+  fill(125, 65, 35);
+  drawBar(guardian.bulletCooldown, 110, 2);
 }
 
 //------------------------------------------------------------------------------------
@@ -279,6 +190,8 @@ void randomizeObstacles() {
 //------------------------------------------------------------------------------------
 
 void drawBar(float value, float x, float scale) {
+  stroke(0);
+  strokeWeight(2);
   float barHeight = map(value, 0, scale, 0, 100);
   rect(x, height - 10 - barHeight, 20, barHeight);
 }
@@ -303,6 +216,9 @@ void keyPressed() {
   if (key == ' ') {
     spacePressed = true;
   }
+  if (key == ESC) {
+    key = 0;
+  }
 }
 
 void keyReleased() {
@@ -318,27 +234,25 @@ void keyReleased() {
   if ((key == 'd' || key == 'D') && !aPressed) {
     dPressed = false;
   }
-  if ((key == 'm' || key == 'M')) {
-    rails = !rails;
-  }
-  if ((key == 'b' || key == 'B')) {
-    boostMode = !boostMode;
-  }
   if ((key == 'c' || key == 'C')) {
     for (int i = 0; i < trailLength; i++) {
-      trail[i] = pos.copy();
+      trail[i] = guardian.pos.copy();
     }
   }
+  /*if ((key == 'm' || key == 'M')) {
+   rails = !rails;
+   }
+   if ((key == 'b' || key == 'B')) {
+   boostMode = !boostMode;
+   }
   if ((key == 'q' || key == 'Q')) {
-    controlled = !controlled;
+   controlled = !controlled;
+   }*/
+  if (key == ' ') {
+    spacePressed = false;
   }
-  if (key == ' ' && boosting && !boostMode) {
-    spacePressed = false;
-    boosting = false;
-    acc = 4.0;
-  } else if (key == ' ' && boosting) {
-    spacePressed = false;
-  } else if (key == ' ') {
-    spacePressed = false;
+  if (key == ESC) {
+    if (menu.state == MenuState.INGAME)
+      menu.state = MenuState.PAUSE;
   }
 }

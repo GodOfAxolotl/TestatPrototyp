@@ -1,5 +1,4 @@
-class Behavior { //<>// //<>// //<>// //<>//
-
+class Behavior {
   BehaviorState state = BehaviorState.SEARCHING;
   PVector desire;
   float prevError = 0;
@@ -47,15 +46,16 @@ class Behavior { //<>// //<>// //<>// //<>//
       result[0] = false;
       switch(state) {
       case HALTING:
+        //result = halt(pos, vel);
         break;
       case ADJUSTING:
-        result = turnTo(pos, desire, an, turnVel); //LEAVE THE SCREEN
+        //result = turnTo(pos, desire, an, turnVel); //LEAVE THE SCREEN
         break;
       case NAVIGATE:
         result = moveTo(pos, desire, vel); //LEAVE THE SCREEN
         break;
       case SEARCHING:
-        result = turnTo(pos, desire, an, turnVel);
+        //result = turnTo(pos, desire, an, turnVel);
         break;
       case MOVING:
         result = moveTo(pos, desire, vel);
@@ -110,8 +110,8 @@ class Behavior { //<>// //<>// //<>// //<>//
       result[2]= true;
     }
     prevError = error;
-    println(abs(currTurnVel) <= 0.0001 , turnVel <= epsilon/100 , abs(error) <= epsilon);
-    if ( turnVel <= epsilon/100 && abs(error) <= epsilon) {
+    println(abs(currTurnVel) <= 0.0001, turnVel <= epsilon/100, abs(error) <= epsilon);
+    if ( turnVel <= epsilon/100 && abs(error) <= epsilon*5) {
       state = BehaviorState.MOVING;
     }
     println(result);
@@ -135,7 +135,7 @@ class Behavior { //<>// //<>// //<>// //<>//
     integral += error;
     derivative = error - prevError;
 
-    PVector param = new PVector(0.01, 0.0, 0.45);
+    PVector param = new PVector(0.01, 0.01, 0.45);
     PVector controlValue = new PVector(error, integral, derivative);
 
     float moveVel = param.dot(controlValue);
@@ -162,6 +162,10 @@ class Behavior { //<>// //<>// //<>// //<>//
 
     return result;
   }
+  //----------------------------------------------------------------------------
+
+
+
 
   //----------------------------------------------------------------------------
 

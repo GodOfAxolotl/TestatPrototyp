@@ -12,10 +12,10 @@ class Heatfield {
   }
 
   PVector randPos() {
-    int r = floor(random(1, 1));
+    int r = floor(random(0, 3));
     switch(r) {
     case 0:
-      return new PVector(random(width/4, width / 2), height/2);
+      return new PVector(random(width/4, width - width/4), height/2);
     case 1:
       return new PVector(random(width/4, width / 2), 100);
     case 2:

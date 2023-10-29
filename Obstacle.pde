@@ -3,9 +3,8 @@ class Obstacle {
  float size;
  
  Obstacle(float he) {
-   pos = new PVector(random(width / 2, width - width / 3), he);
-   //size = new PVector(random(width / 4, width - width / 4), height - height / 4);
-   size = 500;
+   pos = new PVector(random(width / 2, width - width / 3), he + random(-25, 25));
+   size = random(width / 6, width / 3);
  }
  
  
@@ -16,6 +15,8 @@ class Obstacle {
  void render() {
    noStroke();
    fill(1);
-   ellipse(pos.x, pos.y, size, size / 4);
+   rectMode(CENTER);
+   rect(pos.x, pos.y, size, size / 3);
+   rectMode(CORNER);
  }
 }
